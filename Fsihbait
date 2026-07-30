@@ -1,0 +1,863 @@
+--[[
+    BE A FISH BAIT! 💀🐟 — Auto Farm v3.1 (Sleek Edition + Rewards)
+    Auto Workout | 2x Frenzy Auto-Click | Auto Fish | Auto Sell | Plot Collect | Auto Rewards
+    Lean, clean, black GUI
+]]
+-- ═══════════════════════════════════════════
+-- CLEANUP PREVIOUS INSTANCE
+-- ═══════════════════════════════════════════
+if _G.StopFarm then pcall(_G.StopFarm) end
+if game:GetService("CoreGui"):FindFirstChild("FishBaitFarmGUI") then
+    game:GetService("CoreGui"):FindFirstChild("FishBaitFarmGUI"):Destroy()
+end
+-- ═══════════════════════════════════════════
+-- SERVICES
+-- ═══════════════════════════════════════════
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local CoreGui = game:GetService("CoreGui")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local Workspace = game:GetService("Workspace")
+local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
+-- ═══════════════════════════════════════════
+-- REMOTE REFERENCES
+-- ═══════════════════════════════════════════
+local globalFunctions = ReplicatedStorage:FindFirstChild("shared/network@globalFunctions")
+local globalEvents = ReplicatedStorage:FindFirstChild("shared/network@globalEvents")
+local remotes = {
+    trainingTick = globalFunctions and globalFunctions:FindFirstChild("trainingTick"),
+    trainingBonus = globalFunctions and globalFunctions:FindFirstChild("trainingSkillcheckBonus"),
+    sellFish = globalFunctions and globalFunctions:FindFirstChild("sellFishItems"),
+    collectPlot = globalFunctions and globalFunctions:FindFirstChild("collectPlotMoney"),
+    claimDailyReward = globalFunctions and globalFunctions:FindFirstChild("claimDailyReward"),
+    claimPlaytimeReward = globalFunctions and globalFunctions:FindFirstChild("claimPlaytimeReward"),
+    claimOfflineEarnings = globalFunctions and globalFunctions:FindFirstChild("claimOfflineEarnings"),
+    claimIndexReward = globalFunctions and globalFunctions:FindFirstChild("claimIndexReward"),
+    spinPlaytimeWheel = globalFunctions and globalFunctions:FindFirstChild("spinPlaytimeWheel"),
+    fishLanded = globalEvents and globalEvents:FindFirstChild("fishLanded"),
+    hookLanded = globalEvents and globalEvents:FindFirstChild("hookLanded"),
+}
+-- ═══════════════════════════════════════════
+-- STATE
+-- ═══════════════════════════════════════════
+local STATE = {
+    running = true,
+    workout = true,
+    fish = true,
+    sell = true,
+    plotMoney = true,
+    rewards = true,
+    antiAfk = true,
+}
+local STATS = {
+    workoutReps = 0,
+    fishCaught = 0,
+    sellCount = 0,
+    plotCollects = 0,
+    rewardsClaimed = 0,
+    lastFishTime = 0,
+    startTime = tick(),
+}
+local CONFIG = {
+    workoutInterval = 0.05,
+    sellInterval = 15,
+    plotInterval = 10,
+    rewardsInterval = 30,
+    fishCastDelay = 1.0,
+    fishReelDelay = 0.3,
+    fishLoopDelay = 1.5,
+}
+-- ═══════════════════════════════════════════
+-- COLOR PALETTE (LEAN & BLACK)
+-- ═══════════════════════════════════════════
+local COLORS = {
+    bg = Color3.fromRGB(10, 8, 15),
+    bgCard = Color3.fromRGB(16, 14, 24),
+    bgHover = Color3.fromRGB(24, 20, 36),
+    accent = Color3.fromRGB(168, 85, 247), -- Neon purple
+    accentDim = Color3.fromRGB(126, 34, 206),
+    textPrimary = Color3.fromRGB(243, 244, 246),
+    textSecondary = Color3.fromRGB(156, 163, 175),
+    textMuted = Color3.fromRGB(107, 114, 128),
+    border = Color3.fromRGB(36, 28, 48),
+    toggleOn = Color3.fromRGB(168, 85, 247),
+    toggleOff = Color3.fromRGB(31, 25, 41),
+    toggleKnob = Color3.fromRGB(255, 255, 255),
+    red = Color3.fromRGB(239, 68, 68),
+}
+-- ═══════════════════════════════════════════
+-- GUI CREATION
+-- ═══════════════════════════════════════════
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "FishBaitFarmGUI"
+screenGui.ResetOnSpawn = false
+screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+screenGui.Parent = CoreGui
+-- Main frame
+local mainFrame = Instance.new("Frame")
+mainFrame.Name = "MainFrame"
+mainFrame.Size = UDim2.new(0, 240, 0, 0)
+mainFrame.Position = UDim2.new(0, 30, 0.5, -200)
+mainFrame.BackgroundColor3 = COLORS.bg
+mainFrame.BorderSizePixel = 0
+mainFrame.ClipsDescendants = true
+mainFrame.Parent = screenGui
+local mainCorner = Instance.new("UICorner")
+mainCorner.CornerRadius = UDim.new(0, 6)
+mainCorner.Parent = mainFrame
+local mainStroke = Instance.new("UIStroke")
+mainStroke.Color = COLORS.border
+mainStroke.Thickness = 1.2
+mainStroke.Parent = mainFrame
+-- ═══════════════════════════════════════════
+-- TITLE BAR (draggable)
+-- ═══════════════════════════════════════════
+local titleBar = Instance.new("Frame")
+titleBar.Name = "TitleBar"
+titleBar.Size = UDim2.new(1, 0, 0, 36)
+titleBar.BackgroundColor3 = COLORS.bg
+titleBar.BorderSizePixel = 0
+titleBar.Parent = mainFrame
+local titleLabel = Instance.new("TextLabel")
+titleLabel.Size = UDim2.new(1, -60, 1, 0)
+titleLabel.Position = UDim2.new(0, 14, 0, 0)
+titleLabel.BackgroundTransparency = 1
+titleLabel.Text = "ENI HUB <font color=\"#A855F7\">//</font> FISH BAIT"
+titleLabel.RichText = true
+titleLabel.TextSize = 11
+titleLabel.Font = Enum.Font.GothamBold
+titleLabel.TextColor3 = COLORS.textPrimary
+titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+titleLabel.Parent = titleBar
+local minimizeBtn = Instance.new("TextButton")
+minimizeBtn.Name = "MinimizeBtn"
+minimizeBtn.Size = UDim2.new(0, 24, 0, 24)
+minimizeBtn.Position = UDim2.new(1, -34, 0.5, -12)
+minimizeBtn.BackgroundTransparency = 1
+minimizeBtn.Text = "—"
+minimizeBtn.TextSize = 11
+minimizeBtn.Font = Enum.Font.GothamMedium
+minimizeBtn.TextColor3 = COLORS.textSecondary
+minimizeBtn.Parent = titleBar
+local isMinimized = false
+local expandedSize = 0
+-- Drag functionality
+local dragging, dragInput, dragStart, startPos
+titleBar.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        dragStart = input.Position
+        startPos = mainFrame.Position
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then dragging = false end
+        end)
+    end
+end)
+titleBar.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+        dragInput = input
+    end
+end)
+UserInputService.InputChanged:Connect(function(input)
+    if input == dragInput and dragging then
+        local delta = input.Position - dragStart
+        mainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+end)
+local titleSep = Instance.new("Frame")
+titleSep.Size = UDim2.new(1, 0, 0, 1)
+titleSep.Position = UDim2.new(0, 0, 1, -1)
+titleSep.BackgroundColor3 = COLORS.border
+titleSep.BorderSizePixel = 0
+titleSep.Parent = titleBar
+-- ═══════════════════════════════════════════
+-- TAB BAR
+-- ═══════════════════════════════════════════
+local tabBar = Instance.new("Frame")
+tabBar.Name = "TabBar"
+tabBar.Size = UDim2.new(1, 0, 0, 26)
+tabBar.Position = UDim2.new(0, 0, 0, 36)
+tabBar.BackgroundColor3 = COLORS.bg
+tabBar.BorderSizePixel = 0
+tabBar.Parent = mainFrame
+local tabLayout = Instance.new("UIListLayout")
+tabLayout.FillDirection = Enum.FillDirection.Horizontal
+tabLayout.SortOrder = Enum.SortOrder.LayoutOrder
+tabLayout.Parent = tabBar
+local mainTabBtn = Instance.new("TextButton")
+mainTabBtn.Size = UDim2.new(0.5, 0, 1, 0)
+mainTabBtn.BackgroundTransparency = 1
+mainTabBtn.Text = "AUTOMATION"
+mainTabBtn.TextSize = 9
+mainTabBtn.Font = Enum.Font.GothamBold
+mainTabBtn.TextColor3 = COLORS.textPrimary
+mainTabBtn.Parent = tabBar
+local settingsTabBtn = Instance.new("TextButton")
+settingsTabBtn.Size = UDim2.new(0.5, 0, 1, 0)
+settingsTabBtn.BackgroundTransparency = 1
+settingsTabBtn.Text = "SETTINGS"
+settingsTabBtn.TextSize = 9
+settingsTabBtn.Font = Enum.Font.GothamBold
+settingsTabBtn.TextColor3 = COLORS.textSecondary
+settingsTabBtn.Parent = tabBar
+local tabIndicator = Instance.new("Frame")
+tabIndicator.Size = UDim2.new(0.5, -28, 0, 1.5)
+tabIndicator.Position = UDim2.new(0, 14, 1, -1.5)
+tabIndicator.BackgroundColor3 = COLORS.accent
+tabIndicator.BorderSizePixel = 0
+tabIndicator.Parent = tabBar
+local tabSep = Instance.new("Frame")
+tabSep.Size = UDim2.new(1, 0, 0, 1)
+tabSep.Position = UDim2.new(0, 0, 1, -1)
+tabSep.BackgroundColor3 = COLORS.border
+tabSep.BorderSizePixel = 0
+tabSep.Parent = tabBar
+-- ═══════════════════════════════════════════
+-- CONTENT CONTAINERS
+-- ═══════════════════════════════════════════
+local content = Instance.new("ScrollingFrame")
+content.Name = "Content"
+content.Size = UDim2.new(1, 0, 1, -62)
+content.Position = UDim2.new(0, 0, 0, 62)
+content.BackgroundTransparency = 1
+content.BorderSizePixel = 0
+content.ScrollBarThickness = 0
+content.CanvasSize = UDim2.new(0, 0, 0, 0)
+content.AutomaticCanvasSize = Enum.AutomaticSize.Y
+content.Parent = mainFrame
+local contentLayout = Instance.new("UIListLayout")
+contentLayout.SortOrder = Enum.SortOrder.LayoutOrder
+contentLayout.Padding = UDim.new(0, 0)
+contentLayout.Parent = content
+local settingsContent = Instance.new("ScrollingFrame")
+settingsContent.Name = "SettingsContent"
+settingsContent.Size = UDim2.new(1, 0, 1, -62)
+settingsContent.Position = UDim2.new(0, 0, 0, 62)
+settingsContent.BackgroundTransparency = 1
+settingsContent.BorderSizePixel = 0
+settingsContent.ScrollBarThickness = 0
+settingsContent.CanvasSize = UDim2.new(0, 0, 0, 0)
+settingsContent.AutomaticCanvasSize = Enum.AutomaticSize.Y
+settingsContent.Visible = false
+settingsContent.Parent = mainFrame
+local settingsLayout = Instance.new("UIListLayout")
+settingsLayout.SortOrder = Enum.SortOrder.LayoutOrder
+settingsLayout.Padding = UDim.new(0, 0)
+settingsLayout.Parent = settingsContent
+-- Tab Switches
+mainTabBtn.MouseButton1Click:Connect(function()
+    content.Visible = true
+    settingsContent.Visible = false
+    TweenService:Create(tabIndicator, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Position = UDim2.new(0, 14, 1, -1.5)}):Play()
+    mainTabBtn.TextColor3 = COLORS.textPrimary
+    settingsTabBtn.TextColor3 = COLORS.textSecondary
+end)
+settingsTabBtn.MouseButton1Click:Connect(function()
+    content.Visible = false
+    settingsContent.Visible = true
+    TweenService:Create(tabIndicator, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Position = UDim2.new(0.5, 14, 1, -1.5)}):Play()
+    mainTabBtn.TextColor3 = COLORS.textSecondary
+    settingsTabBtn.TextColor3 = COLORS.textPrimary
+end)
+-- ═══════════════════════════════════════════
+-- UI BUILDER HELPERS
+-- ═══════════════════════════════════════════
+local layoutOrder = 0
+local statLabels = {}
+local toggleButtons = {}
+local function nextOrder()
+    layoutOrder = layoutOrder + 1
+    return layoutOrder
+end
+local function createSectionHeader(parent, text)
+    local header = Instance.new("Frame")
+    header.Size = UDim2.new(1, 0, 0, 24)
+    header.BackgroundTransparency = 1
+    header.LayoutOrder = nextOrder()
+    header.Parent = parent
+    
+    local line = Instance.new("Frame")
+    line.Size = UDim2.new(0, 2, 0, 10)
+    line.Position = UDim2.new(0, 14, 0.5, -5)
+    line.BackgroundColor3 = COLORS.accent
+    line.BorderSizePixel = 0
+    line.Parent = header
+    
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1, -32, 1, 0)
+    label.Position = UDim2.new(0, 22, 0, 0)
+    label.BackgroundTransparency = 1
+    label.Text = string.upper(text)
+    label.TextSize = 9
+    label.Font = Enum.Font.GothamBold
+    label.TextColor3 = COLORS.textSecondary
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.Parent = header
+    
+    return header
+end
+local function createToggleRow(parent, label, stateKey)
+    local row = Instance.new("Frame")
+    row.Size = UDim2.new(1, 0, 0, 30)
+    row.BackgroundTransparency = 1
+    row.LayoutOrder = nextOrder()
+    row.Parent = parent
+    
+    local textLabel = Instance.new("TextLabel")
+    textLabel.Size = UDim2.new(1, -70, 1, 0)
+    textLabel.Position = UDim2.new(0, 22, 0, 0)
+    textLabel.BackgroundTransparency = 1
+    textLabel.Text = label
+    textLabel.TextSize = 10
+    textLabel.Font = Enum.Font.GothamMedium
+    textLabel.TextColor3 = COLORS.textPrimary
+    textLabel.TextXAlignment = Enum.TextXAlignment.Left
+    textLabel.Parent = row
+    
+    local toggleTrack = Instance.new("Frame")
+    toggleTrack.Size = UDim2.new(0, 28, 0, 14)
+    toggleTrack.Position = UDim2.new(1, -44, 0.5, -7)
+    toggleTrack.BackgroundColor3 = STATE[stateKey] and COLORS.toggleOn or COLORS.toggleOff
+    toggleTrack.BorderSizePixel = 0
+    toggleTrack.Parent = row
+    Instance.new("UICorner", toggleTrack).CornerRadius = UDim.new(1, 0)
+    
+    local trackStroke = Instance.new("UIStroke")
+    trackStroke.Color = COLORS.border
+    trackStroke.Thickness = 1
+    trackStroke.Parent = toggleTrack
+    
+    local knob = Instance.new("Frame")
+    knob.Size = UDim2.new(0, 10, 0, 10)
+    knob.Position = STATE[stateKey] and UDim2.new(1, -12, 0.5, -5) or UDim2.new(0, 2, 0.5, -5)
+    knob.BackgroundColor3 = COLORS.toggleKnob
+    knob.BorderSizePixel = 0
+    knob.Parent = toggleTrack
+    Instance.new("UICorner", knob).CornerRadius = UDim.new(1, 0)
+    
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(1, 0, 1, 0)
+    btn.BackgroundTransparency = 1
+    btn.Text = ""
+    btn.Parent = row
+    
+    btn.MouseButton1Click:Connect(function()
+        STATE[stateKey] = not STATE[stateKey]
+        local on = STATE[stateKey]
+        TweenService:Create(toggleTrack, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {BackgroundColor3 = on and COLORS.toggleOn or COLORS.toggleOff}):Play()
+        TweenService:Create(knob, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Position = on and UDim2.new(1, -12, 0.5, -5) or UDim2.new(0, 2, 0.5, -5)}):Play()
+    end)
+    
+    toggleButtons[stateKey] = {track = toggleTrack, knob = knob}
+    return row
+end
+local function createStatRow(parent, label, statKey)
+    local row = Instance.new("Frame")
+    row.Size = UDim2.new(1, 0, 0, 20)
+    row.BackgroundTransparency = 1
+    row.LayoutOrder = nextOrder()
+    row.Parent = parent
+    
+    local nameLabel = Instance.new("TextLabel")
+    nameLabel.Size = UDim2.new(0.6, 0, 1, 0)
+    nameLabel.Position = UDim2.new(0, 22, 0, 0)
+    nameLabel.BackgroundTransparency = 1
+    nameLabel.Text = label
+    nameLabel.TextSize = 10
+    nameLabel.Font = Enum.Font.Gotham
+    nameLabel.TextColor3 = COLORS.textSecondary
+    nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+    nameLabel.Parent = row
+    
+    local valueLabel = Instance.new("TextLabel")
+    valueLabel.Name = "Value"
+    valueLabel.Size = UDim2.new(0.4, -22, 1, 0)
+    valueLabel.Position = UDim2.new(0.6, 0, 0, 0)
+    valueLabel.BackgroundTransparency = 1
+    valueLabel.Text = "0"
+    valueLabel.TextSize = 10
+    valueLabel.Font = Enum.Font.GothamBold
+    valueLabel.TextColor3 = COLORS.textPrimary
+    valueLabel.TextXAlignment = Enum.TextXAlignment.Right
+    valueLabel.Parent = row
+    
+    statLabels[statKey] = valueLabel
+    return row
+end
+local function createInputRow(parent, label, configKey)
+    local row = Instance.new("Frame")
+    row.Size = UDim2.new(1, 0, 0, 30)
+    row.BackgroundTransparency = 1
+    row.LayoutOrder = nextOrder()
+    row.Parent = parent
+    
+    local textLabel = Instance.new("TextLabel")
+    textLabel.Size = UDim2.new(1, -90, 1, 0)
+    textLabel.Position = UDim2.new(0, 22, 0, 0)
+    textLabel.BackgroundTransparency = 1
+    textLabel.Text = label
+    textLabel.TextSize = 10
+    textLabel.Font = Enum.Font.GothamMedium
+    textLabel.TextColor3 = COLORS.textSecondary
+    textLabel.TextXAlignment = Enum.TextXAlignment.Left
+    textLabel.Parent = row
+    
+    local textBoxFrame = Instance.new("Frame")
+    textBoxFrame.Size = UDim2.new(0, 50, 0, 18)
+    textBoxFrame.Position = UDim2.new(1, -72, 0.5, -9)
+    textBoxFrame.BackgroundColor3 = COLORS.bgCard
+    textBoxFrame.BorderSizePixel = 0
+    textBoxFrame.Parent = row
+    Instance.new("UICorner", textBoxFrame).CornerRadius = UDim.new(0, 3)
+    
+    local boxStroke = Instance.new("UIStroke")
+    boxStroke.Color = COLORS.border
+    boxStroke.Thickness = 1
+    boxStroke.Parent = textBoxFrame
+    
+    local textBox = Instance.new("TextBox")
+    textBox.Size = UDim2.new(1, 0, 1, 0)
+    textBox.BackgroundTransparency = 1
+    textBox.Text = tostring(CONFIG[configKey])
+    textBox.TextSize = 10
+    textBox.Font = Enum.Font.GothamBold
+    textBox.TextColor3 = COLORS.textPrimary
+    textBox.TextXAlignment = Enum.TextXAlignment.Center
+    textBox.Parent = textBoxFrame
+    
+    textBox.FocusLost:Connect(function(enterPressed)
+        local val = tonumber(textBox.Text)
+        if val then
+            CONFIG[configKey] = val
+        else
+            textBox.Text = tostring(CONFIG[configKey])
+        end
+    end)
+    
+    return row
+end
+local function createPadding(parent, height)
+    local p = Instance.new("Frame")
+    p.Size = UDim2.new(1, 0, 0, height)
+    p.BackgroundTransparency = 1
+    p.LayoutOrder = nextOrder()
+    p.Parent = parent
+end
+-- ═══════════════════════════════════════════
+-- BUILD AUTOMATION TAB
+-- ═══════════════════════════════════════════
+createPadding(content, 6)
+createSectionHeader(content, "Automation")
+createToggleRow(content, "Auto Workout", "workout")
+createToggleRow(content, "Auto Fish", "fish")
+createToggleRow(content, "Auto Sell", "sell")
+createToggleRow(content, "Plot Collect", "plotMoney")
+createToggleRow(content, "Auto Rewards", "rewards")
+createToggleRow(content, "Anti-AFK", "antiAfk")
+createPadding(content, 6)
+createSectionHeader(content, "Statistics")
+createStatRow(content, "Reps", "workoutReps")
+createStatRow(content, "Fish Caught", "fishCaught")
+createStatRow(content, "Sells", "sellCount")
+createStatRow(content, "Plots", "plotCollects")
+createStatRow(content, "Rewards", "rewardsClaimed")
+createStatRow(content, "Uptime", "uptime")
+createPadding(content, 10)
+local stopBtnContainer = Instance.new("Frame")
+stopBtnContainer.Size = UDim2.new(1, 0, 0, 36)
+stopBtnContainer.BackgroundTransparency = 1
+stopBtnContainer.LayoutOrder = nextOrder()
+stopBtnContainer.Parent = content
+local stopBtn = Instance.new("TextButton")
+stopBtn.Size = UDim2.new(1, -44, 0, 24)
+stopBtn.Position = UDim2.new(0, 22, 0, 0)
+stopBtn.BackgroundColor3 = COLORS.bgCard
+stopBtn.BorderSizePixel = 0
+stopBtn.Text = "STOP SYSTEM"
+stopBtn.TextSize = 9
+stopBtn.Font = Enum.Font.GothamBold
+stopBtn.TextColor3 = COLORS.red
+stopBtn.Parent = stopBtnContainer
+Instance.new("UICorner", stopBtn).CornerRadius = UDim.new(0, 4)
+local btnStroke = Instance.new("UIStroke")
+btnStroke.Color = COLORS.border
+btnStroke.Parent = stopBtn
+-- ═══════════════════════════════════════════
+-- BUILD SETTINGS TAB
+-- ═══════════════════════════════════════════
+createPadding(settingsContent, 6)
+createSectionHeader(settingsContent, "Speed & Delays")
+createInputRow(settingsContent, "Workout Speed", "workoutInterval")
+createInputRow(settingsContent, "Sell Interval", "sellInterval")
+createInputRow(settingsContent, "Plot Interval", "plotInterval")
+createPadding(settingsContent, 6)
+createSectionHeader(settingsContent, "Fishing Settings")
+createInputRow(settingsContent, "Fish Cast Delay", "fishCastDelay")
+createInputRow(settingsContent, "Fish Reel Delay", "fishReelDelay")
+createInputRow(settingsContent, "Fish Loop Delay", "fishLoopDelay")
+-- ═══════════════════════════════════════════
+-- SET FRAME SIZE + MINIMIZE LOGIC
+-- ═══════════════════════════════════════════
+task.wait(0.1)
+expandedSize = math.max(contentLayout.AbsoluteContentSize.Y, settingsLayout.AbsoluteContentSize.Y) + 62 + 12
+mainFrame.Size = UDim2.new(0, 240, 0, math.min(expandedSize, 400))
+minimizeBtn.MouseButton1Click:Connect(function()
+    isMinimized = not isMinimized
+    local targetSize = isMinimized and UDim2.new(0, 240, 0, 36) or UDim2.new(0, 240, 0, math.min(expandedSize, 400))
+    minimizeBtn.Text = isMinimized and "+" or "—"
+    TweenService:Create(mainFrame, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Size = targetSize}):Play()
+end)
+-- ═══════════════════════════════════════════
+-- TOGGLE KEY (L)
+-- ═══════════════════════════════════════════
+local guiVisible = true
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    if input.KeyCode == Enum.KeyCode.L then
+        guiVisible = not guiVisible
+        mainFrame.Visible = guiVisible
+    end
+end)
+-- ═══════════════════════════════════════════
+-- UTILITY FUNCTIONS
+-- ═══════════════════════════════════════════
+local function getHRP()
+    local char = player.Character
+    return char and char:FindFirstChild("HumanoidRootPart")
+end
+local function teleportTo(pos)
+    local hrp = getHRP()
+    if hrp then hrp.CFrame = CFrame.new(pos) end
+end
+local function fire(remote, ...)
+    if remote and remote:IsA("RemoteEvent") then
+        remote:FireServer(...)
+        return true
+    elseif remote and remote:IsA("RemoteFunction") then
+        pcall(remote.InvokeServer, remote, ...)
+        return true
+    end
+    return false
+end
+local function formatTime(seconds)
+    local h = math.floor(seconds / 3600)
+    local m = math.floor((seconds % 3600) / 60)
+    local s = math.floor(seconds % 60)
+    if h > 0 then return string.format("%dh %dm %ds", h, m, s)
+    elseif m > 0 then return string.format("%dm %ds", m, s)
+    else return string.format("%ds", s) end
+end
+local function abbreviate(n)
+    if n >= 1e9 then return string.format("%.2fB", n / 1e9)
+    elseif n >= 1e6 then return string.format("%.2fM", n / 1e6)
+    elseif n >= 1e3 then return string.format("%.1fK", n / 1e3)
+    else return tostring(n) end
+end
+-- ═══════════════════════════════════════════
+-- RESPAWN HANDLER
+-- ═══════════════════════════════════════════
+player.CharacterAdded:Connect(function(newChar)
+    character = newChar
+    humanoidRootPart = newChar:WaitForChild("HumanoidRootPart")
+end)
+-- ═══════════════════════════════════════════
+-- ANTI-AFK
+-- ═══════════════════════════════════════════
+pcall(function()
+    local vu = game:GetService("VirtualUser")
+    player.Idled:Connect(function()
+        if STATE.antiAfk then
+            vu:CaptureController()
+            vu:ClickButton2(Vector2.new())
+        end
+    end)
+end)
+-- ═══════════════════════════════════════════
+-- MODULE: AUTO WORKOUT + 2X FRENZY CLICKER
+-- ═══════════════════════════════════════════
+task.spawn(function()
+    local guiService = game:GetService("GuiService")
+    while STATE.running do
+        if STATE.workout and remotes.trainingTick then
+            fire(remotes.trainingTick)
+            STATS.workoutReps = STATS.workoutReps + 1
+            
+            if STATS.workoutReps % 5 == 0 and remotes.trainingBonus then
+                fire(remotes.trainingBonus)
+            end
+            
+            pcall(function()
+                local pg = player:FindFirstChild("PlayerGui")
+                local inset = guiService:GetGuiInset()
+                if pg then
+                    for _, desc in pairs(pg:GetDescendants()) do
+                        if desc.Name == "doubled" and desc:IsA("Frame") and desc.Visible then
+                            local pos = desc.AbsolutePosition
+                            local size = desc.AbsoluteSize
+                            local cx = pos.X + (size.X / 2) + inset.X
+                            local cy = pos.Y + (size.Y / 2) + inset.Y
+                            VirtualInputManager:SendMouseButtonEvent(cx, cy, 0, true, game, 1)
+                            task.wait(0.02)
+                            VirtualInputManager:SendMouseButtonEvent(cx, cy, 0, false, game, 1)
+                        end
+                        
+                        -- Check for 2x Purple Button (Frenzy)
+                        if (desc:IsA("TextLabel") or desc:IsA("TextButton")) and desc.Text:lower():find("2x") then
+                            local p = desc.Parent
+                            while p and p ~= pg do
+                                if p:IsA("GuiButton") or p:IsA("ImageButton") or p:IsA("TextButton") then
+                                    local cx = p.AbsolutePosition.X + (p.AbsoluteSize.X / 2) + inset.X
+                                    local cy = p.AbsolutePosition.Y + (p.AbsoluteSize.Y / 2) + inset.Y
+                                    VirtualInputManager:SendMouseButtonEvent(cx, cy, 0, true, game, 1)
+                                    task.wait(0.02)
+                                    VirtualInputManager:SendMouseButtonEvent(cx, cy, 0, false, game, 1)
+                                    break
+                                end
+                                p = p.Parent
+                            end
+                        end
+                    end
+                end
+            end)
+        end
+        task.wait(CONFIG.workoutInterval)
+    end
+end)
+-- ═══════════════════════════════════════════
+-- MODULE: AUTO FISH
+-- ═══════════════════════════════════════════
+if remotes.fishLanded then
+    remotes.fishLanded.OnClientEvent:Connect(function(...)
+        STATS.lastFishTime = tick()
+        STATS.fishCaught = STATS.fishCaught + 1
+    end)
+end
+local function findFishingZone()
+    local map = Workspace:FindFirstChild("Map")
+    if map then
+        local fa = map:FindFirstChild("FishingArea")
+        if fa then
+            local zone = fa:FindFirstChild("FishingZone")
+            if zone then return zone end
+        end
+    end
+    for _, d in pairs(Workspace:GetDescendants()) do
+        if d.Name == "FishingZone" and d:IsA("BasePart") then return d end
+    end
+    return nil
+end
+task.spawn(function()
+    task.wait(1)
+    if STATE.fish then
+        local zone = findFishingZone()
+        if zone then
+            teleportTo(zone.Position + Vector3.new(0, 5, 0))
+        end
+    end
+end)
+local vim = game:GetService("VirtualInputManager")
+local guiService = game:GetService("GuiService")
+local function clickFishButton()
+    local playerGui = game.Players.LocalPlayer:WaitForChild("PlayerGui")
+    local inset = guiService:GetGuiInset()
+    local clicked = false
+    
+    for _, d in pairs(playerGui:GetDescendants()) do
+        if clicked then break end
+        pcall(function()
+            if (d:IsA("TextLabel") or d:IsA("TextButton")) and d.Text:lower():find("fish") then
+                local p = d.Parent
+                while p and p ~= playerGui do
+                    if p:IsA("GuiButton") or p:IsA("ImageButton") or p:IsA("TextButton") then
+                        local cx = p.AbsolutePosition.X + (p.AbsoluteSize.X / 2) + inset.X
+                        local cy = p.AbsolutePosition.Y + (p.AbsoluteSize.Y / 2) + inset.Y
+                        vim:SendMouseButtonEvent(cx, cy, 0, true, game, 1)
+                        task.wait(0.05)
+                        vim:SendMouseButtonEvent(cx, cy, 0, false, game, 1)
+                        clicked = true
+                        return
+                    end
+                    p = p.Parent
+                end
+            end
+        end)
+    end
+    return clicked
+end
+task.spawn(function()
+    while STATE.running do
+        if STATE.fish then
+            pcall(function()
+                local hrp = getHRP()
+                local zone = findFishingZone()
+                
+                -- Proactively ensure we are at the fishing zone first
+                if zone and hrp then
+                    local dist = (hrp.Position - zone.Position).Magnitude
+                    if dist > 20 then
+                        teleportTo(zone.Position + Vector3.new(0, 5, 0))
+                        task.wait(1)
+                    end
+                end
+                
+                -- Cast
+                if clickFishButton() then
+                    task.wait(CONFIG.fishCastDelay)
+                    
+                    local waitStart = tick()
+                    while tick() - waitStart < 10 and STATE.running and STATE.fish do
+                        if STATS.lastFishTime > waitStart then break end
+                        
+                        -- Spam click for QTE/Reeling
+                        clickFishButton()
+                        
+                        -- Also spam click center screen in case QTE is anywhere
+                        local cam = workspace.CurrentCamera
+                        local cx, cy = cam.ViewportSize.X / 2, cam.ViewportSize.Y / 2
+                        vim:SendMouseButtonEvent(cx, cy, 0, true, game, 1)
+                        task.wait(0.02)
+                        vim:SendMouseButtonEvent(cx, cy, 0, false, game, 1)
+                        
+                        task.wait(0.1)
+                    end
+                    
+                    task.wait(CONFIG.fishReelDelay)
+                    
+                    -- Final reel click
+                    clickFishButton()
+                else
+                    -- Fallback: If we couldn't find the UI button, try clicking center of screen as cast backup
+                    local cam = workspace.CurrentCamera
+                    local cx, cy = cam.ViewportSize.X / 2, cam.ViewportSize.Y / 2
+                    vim:SendMouseButtonEvent(cx, cy, 0, true, game, 1)
+                    task.wait(0.05)
+                    vim:SendMouseButtonEvent(cx, cy, 0, false, game, 1)
+                end
+            end)
+            task.wait(CONFIG.fishLoopDelay)
+        else
+            task.wait(1)
+        end
+    end
+end)
+-- ═══════════════════════════════════════════
+-- MODULE: AUTO SELL
+-- ═══════════════════════════════════════════
+local function autoSellLoop()
+    while task.wait(CONFIG.sellInterval) do
+        if STATE.sell then
+            local hrp = getHRP()
+            if hrp then
+                local sellPad = nil
+                local shops = workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("Shops")
+                if shops then
+                    local sellShop = shops:FindFirstChild("SellShop")
+                    if sellShop then
+                        sellPad = sellShop:FindFirstChild("SellCircle")
+                    end
+                end
+                
+                if sellPad then
+                    local oldCFrame = hrp.CFrame
+                    hrp.CFrame = sellPad.CFrame + Vector3.new(0, 3, 0)
+                    task.wait(0.5)
+                    firetouchinterest(hrp, sellPad, 0)
+                    task.wait(0.1)
+                    firetouchinterest(hrp, sellPad, 1)
+                    task.wait(1.5)
+                    hrp.CFrame = oldCFrame
+                end
+            end
+        end
+    end
+end
+task.spawn(autoSellLoop)
+-- ═══════════════════════════════════════════
+-- MODULE: AUTO COLLECT PLOT MONEY
+-- ═══════════════════════════════════════════
+local function autoPlotLoop()
+    while task.wait(CONFIG.plotInterval) do
+        if STATE.plotMoney then
+            local hrp = getHRP()
+            if hrp then
+                -- Lock onto closest plot the first time it runs
+                if not STATE.myPlot then
+                    local mapPlots = Workspace:FindFirstChild("MapPlots")
+                    local plots = mapPlots and mapPlots:FindFirstChild("Plots")
+                    if plots then
+                        local closest, minDist = nil, math.huge
+                        for _, p in pairs(plots:GetChildren()) do
+                            if p.PrimaryPart or p:FindFirstChildWhichIsA("BasePart") then
+                                local pos = p:GetPivot().Position
+                                local d = (pos - hrp.Position).Magnitude
+                                if d < minDist then
+                                    minDist = d
+                                    closest = p
+                                end
+                            end
+                        end
+                        if minDist < 100 then
+                            STATE.myPlot = closest
+                        end
+                    end
+                end
+                
+                -- Collect from locked plot
+                if STATE.myPlot then
+                    local area = STATE.myPlot:FindFirstChild("PlotMoneyCollectionArea")
+                    local btn = area and area:FindFirstChild("Button")
+                    if btn and btn:IsA("BasePart") then
+                        firetouchinterest(hrp, btn, 0)
+                        task.wait(0.1)
+                        firetouchinterest(hrp, btn, 1)
+                        STATS.plotCollects = STATS.plotCollects + 1
+                    end
+                end
+            end
+        end
+    end
+end
+task.spawn(autoPlotLoop)
+-- ═══════════════════════════════════════════
+-- STAT UPDATER
+-- ═══════════════════════════════════════════
+task.spawn(function()
+    while STATE.running do
+        task.wait(0.5)
+        if statLabels.workoutReps then statLabels.workoutReps.Text = abbreviate(STATS.workoutReps) end
+        if statLabels.fishCaught then statLabels.fishCaught.Text = abbreviate(STATS.fishCaught) end
+        if statLabels.sellCount then statLabels.sellCount.Text = tostring(STATS.sellCount) end
+        if statLabels.plotCollects then statLabels.plotCollects.Text = tostring(STATS.plotCollects) end
+        if statLabels.uptime then statLabels.uptime.Text = formatTime(tick() - STATS.startTime) end
+    end
+end)
+-- ═══════════════════════════════════════════
+-- STOP BUTTON
+-- ═══════════════════════════════════════════
+stopBtn.MouseButton1Click:Connect(function()
+    STATE.running = false
+    STATE.workout = false
+    STATE.fish = false
+    STATE.sell = false
+    STATE.plotMoney = false
+    
+    stopBtn.Text = "STOPPED"
+    
+    for key, parts in pairs(toggleButtons) do
+        TweenService:Create(parts.track, TweenInfo.new(0.2), {BackgroundColor3 = COLORS.toggleOff}):Play()
+        TweenService:Create(parts.knob, TweenInfo.new(0.2), {Position = UDim2.new(0, 2, 0.5, -6)}):Play()
+    end
+    
+    task.wait(0.5)
+    screenGui:Destroy()
+end)
+_G.StopFarm = function()
+    STATE.running = false
+    pcall(function() screenGui:Destroy() end)
+end
+print("[AutoFarm] GUI loaded — v3.2 Sleek Edition")
