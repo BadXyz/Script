@@ -9,19 +9,6 @@ local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
 --==================================================
--- WAIT TOUCH GUI
---==================================================
-
-local touchGui = playerGui:WaitForChild("TouchGui", 15)
-if not touchGui then return end
-
-local touchFrame = touchGui:WaitForChild("TouchControlFrame", 15)
-if not touchFrame then return end
-
-local jump = touchFrame:WaitForChild("JumpButton", 15)
-if not jump then return end
-
---==================================================
 -- SETTINGS
 --==================================================
 
@@ -30,6 +17,37 @@ local MAX_SIZE = 180
 local SIZE_STEP = 5
 
 local editing = false
+local restoringSize = false
+
+--==================================================
+-- WAIT TOUCH GUI
+--==================================================
+
+local touchGui = playerGui:WaitForChild("TouchGui", 15)
+if not touchGui then
+	return
+end
+
+local touchFrame = touchGui:WaitForChild("TouchControlFrame", 15)
+if not touchFrame then
+	return
+end
+
+local jump = touchFrame:WaitForChild("JumpButton", 15)
+if not jump then
+	return
+end
+
+--==================================================
+-- SAVE ORIGINAL / CUSTOM SIZE
+--==================================================
+
+local savedJumpSize = jump.AbsoluteSize.X
+
+-- Pastikan ukuran awal tersimpan
+if savedJumpSize < MIN_SIZE then
+	savedJumpSize = 60
+end
 
 --==================================================
 -- MAIN GUI
@@ -52,7 +70,7 @@ editButton.Position = UDim2.new(0, 15, 0.5, -21)
 editButton.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 editButton.TextColor3 = Color3.new(1, 1, 1)
 editButton.Text = "SettingJump"
-editButton.TextSize = 16
+editButton.TextSize = 13
 editButton.Font = Enum.Font.GothamBold
 editButton.Active = true
 editButton.Parent = gui
@@ -86,6 +104,7 @@ labelCorner.Parent = label
 --==================================================
 
 local doneButton = Instance.new("TextButton")
+doneButton.Name = "DoneButton"
 doneButton.Size = UDim2.fromOffset(80, 42)
 doneButton.Position = UDim2.new(1, -95, 0.5, -21)
 doneButton.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
@@ -101,7 +120,7 @@ doneCorner.CornerRadius = UDim.new(0, 10)
 doneCorner.Parent = doneButton
 
 --==================================================
--- RESIZE BUTTONS
+-- MINUS BUTTON
 --==================================================
 
 local minusButton = Instance.new("TextButton")
@@ -119,6 +138,10 @@ local minusCorner = Instance.new("UICorner")
 minusCorner.CornerRadius = UDim.new(0, 8)
 minusCorner.Parent = minusButton
 
+--==================================================
+-- PLUS BUTTON
+--==================================================
+
 local plusButton = Instance.new("TextButton")
 plusButton.Name = "PlusButton"
 plusButton.Size = UDim2.fromOffset(32, 28)
@@ -135,7 +158,30 @@ plusCorner.CornerRadius = UDim.new(0, 8)
 plusCorner.Parent = plusButton
 
 --==================================================
--- POSISI -/+ DI BAWAH JUMP
+-- APPLY SAVED SIZE
+--==================================================
+
+local function applySavedSize()
+	if not jump or not jump.Parent then
+		return
+	end
+
+	if restoringSize then
+		return
+	end
+
+	restoringSize = true
+
+	jump.Size = UDim2.fromOffset(
+		savedJumpSize,
+		savedJumpSize
+	)
+
+	restoringSize = false
+end
+
+--==================================================
+-- UPDATE RESIZE BUTTONS
 --==================================================
 
 local function updateResizeButtons()
@@ -143,52 +189,125 @@ local function updateResizeButtons()
 		return
 	end
 
+	if not jump or not jump.Parent then
+		return
+	end
+
 	local pos = jump.AbsolutePosition
 	local size = jump.AbsoluteSize
 
-	local totalWidth = 32 + 4 + 32
+	local buttonWidth = 32
+	local gap = 4
+
+	local totalWidth =
+		buttonWidth +
+		gap +
+		buttonWidth
+
 	local centerX = pos.X + (size.X / 2)
 
-	local y = pos.Y + size.Y + 6
+	local startX =
+		centerX -
+		(totalWidth / 2)
+
+	local y =
+		pos.Y +
+		size.Y +
+		6
 
 	minusButton.Position = UDim2.fromOffset(
-		centerX - (totalWidth / 2),
+		startX,
 		y
 	)
 
 	plusButton.Position = UDim2.fromOffset(
-		centerX + 4 - (totalWidth / 2) + 32,
+		startX + buttonWidth + gap,
 		y
 	)
 end
 
 --==================================================
--- RESIZE
+-- RESIZE JUMP
 --==================================================
 
 local function resizeJump(amount)
-	local currentSize = jump.AbsoluteSize.X
-
 	local newSize = math.clamp(
-		currentSize + amount,
+		savedJumpSize + amount,
 		MIN_SIZE,
 		MAX_SIZE
 	)
 
-	jump.Size = UDim2.fromOffset(
-		newSize,
-		newSize
-	)
+	savedJumpSize = newSize
 
-	task.defer(updateResizeButtons)
+	applySavedSize()
+
+	task.defer(function()
+		updateResizeButtons()
+	end)
 end
+
+--==================================================
+-- MINUS
+--==================================================
 
 minusButton.Activated:Connect(function()
 	resizeJump(-SIZE_STEP)
 end)
 
+--==================================================
+-- PLUS
+--==================================================
+
 plusButton.Activated:Connect(function()
 	resizeJump(SIZE_STEP)
+end)
+
+--==================================================
+-- DETECT ROBLOX RESETTING JUMP SIZE
+--==================================================
+
+jump:GetPropertyChangedSignal("Size"):Connect(function()
+
+	if restoringSize then
+		return
+	end
+
+	-- Kalau ukuran berubah bukan dari tombol +/-
+	-- kembalikan ke ukuran custom yang tersimpan.
+	task.defer(function()
+
+		if not jump or not jump.Parent then
+			return
+		end
+
+		local currentSize = jump.AbsoluteSize.X
+
+		if math.abs(currentSize - savedJumpSize) > 1 then
+			applySavedSize()
+		end
+
+		if editing then
+			updateResizeButtons()
+		end
+	end)
+end)
+
+--==================================================
+-- TAMBAHAN PROTEKSI SAAT JUMP DITEKAN
+--==================================================
+
+jump.Activated:Connect(function()
+
+	-- Roblox kadang mengubah ukuran JumpButton
+	-- ketika tombol ditekan.
+	task.defer(function()
+		applySavedSize()
+
+		task.defer(function()
+			applySavedSize()
+		end)
+	end)
+
 end)
 
 --==================================================
@@ -196,6 +315,7 @@ end)
 --==================================================
 
 local function setEditMode(state)
+
 	editing = state
 
 	label.Visible = state
@@ -206,12 +326,25 @@ local function setEditMode(state)
 	plusButton.Visible = state
 
 	if state then
+
+		-- Pastikan ukuran tetap custom
+		applySavedSize()
+
 		jump.Active = true
 		jump.ImageTransparency = 0.15
 
-		task.defer(updateResizeButtons)
+		task.defer(function()
+			updateResizeButtons()
+		end)
+
 	else
+
+		-- Saat keluar edit mode,
+		-- tetap gunakan ukuran custom.
+		applySavedSize()
+
 		jump.ImageTransparency = 0
+
 	end
 end
 
@@ -225,6 +358,7 @@ local editStartPos
 local editMoved = false
 
 editButton.InputBegan:Connect(function(input)
+
 	if input.UserInputType == Enum.UserInputType.Touch
 		or input.UserInputType == Enum.UserInputType.MouseButton1 then
 
@@ -233,10 +367,12 @@ editButton.InputBegan:Connect(function(input)
 
 		editDragStart = input.Position
 		editStartPos = editButton.Position
+
 	end
 end)
 
 editButton.InputChanged:Connect(function(input)
+
 	if not editDragging then
 		return
 	end
@@ -244,7 +380,9 @@ editButton.InputChanged:Connect(function(input)
 	if input.UserInputType == Enum.UserInputType.Touch
 		or input.UserInputType == Enum.UserInputType.MouseMovement then
 
-		local delta = input.Position - editDragStart
+		local delta =
+			input.Position -
+			editDragStart
 
 		if delta.Magnitude > 8 then
 			editMoved = true
@@ -257,10 +395,12 @@ editButton.InputChanged:Connect(function(input)
 			editStartPos.Y.Scale,
 			editStartPos.Y.Offset + delta.Y
 		)
+
 	end
 end)
 
 editButton.InputEnded:Connect(function(input)
+
 	if input.UserInputType == Enum.UserInputType.Touch
 		or input.UserInputType == Enum.UserInputType.MouseButton1 then
 
@@ -269,6 +409,7 @@ editButton.InputEnded:Connect(function(input)
 		if not editMoved then
 			setEditMode(true)
 		end
+
 	end
 end)
 
@@ -277,7 +418,18 @@ end)
 --==================================================
 
 doneButton.Activated:Connect(function()
+
+	-- Simpan ukuran sebelum keluar
+	savedJumpSize = math.clamp(
+		savedJumpSize,
+		MIN_SIZE,
+		MAX_SIZE
+	)
+
+	applySavedSize()
+
 	setEditMode(false)
+
 end)
 
 --==================================================
@@ -289,6 +441,7 @@ local jumpDragStart
 local jumpStartPos
 
 jump.InputBegan:Connect(function(input)
+
 	if not editing then
 		return
 	end
@@ -300,10 +453,12 @@ jump.InputBegan:Connect(function(input)
 
 		jumpDragStart = input.Position
 		jumpStartPos = jump.Position
+
 	end
 end)
 
 jump.InputChanged:Connect(function(input)
+
 	if not editing or not jumpDragging then
 		return
 	end
@@ -311,7 +466,9 @@ jump.InputChanged:Connect(function(input)
 	if input.UserInputType == Enum.UserInputType.Touch
 		or input.UserInputType == Enum.UserInputType.MouseMovement then
 
-		local delta = input.Position - jumpDragStart
+		local delta =
+			input.Position -
+			jumpDragStart
 
 		jump.Position = UDim2.new(
 			jumpStartPos.X.Scale,
@@ -321,32 +478,69 @@ jump.InputChanged:Connect(function(input)
 			jumpStartPos.Y.Offset + delta.Y
 		)
 
-		task.defer(updateResizeButtons)
+		task.defer(function()
+			updateResizeButtons()
+		end)
+
 	end
 end)
 
 jump.InputEnded:Connect(function(input)
+
 	if input.UserInputType == Enum.UserInputType.Touch
 		or input.UserInputType == Enum.UserInputType.MouseButton1 then
 
 		jumpDragging = false
+
 	end
 end)
 
 --==================================================
--- UPDATE POSISI SAAT UKURAN / POSISI BERUBAH
+-- UPDATE SAAT POSISI BERUBAH
 --==================================================
 
 jump:GetPropertyChangedSignal("Position"):Connect(function()
+
 	if editing then
-		task.defer(updateResizeButtons)
+		task.defer(function()
+			updateResizeButtons()
+		end)
 	end
+
 end)
 
-jump:GetPropertyChangedSignal("Size"):Connect(function()
-	if editing then
-		task.defer(updateResizeButtons)
+--==================================================
+-- INITIALIZE
+--==================================================
+
+applySavedSize()
+
+task.defer(function()
+	updateResizeButtons()
+end)
+
+--==================================================
+-- EXTRA SIZE PROTECTION
+--==================================================
+
+task.spawn(function()
+
+	while gui.Parent do
+
+		task.wait(0.25)
+
+		if jump and jump.Parent then
+
+			local currentSize = jump.AbsoluteSize.X
+
+			if math.abs(currentSize - savedJumpSize) > 1 then
+				applySavedSize()
+			end
+
+		end
+
 	end
+
 end)
 
 game:GetService("StarterGui"):SetCore("SendNotification", { 
