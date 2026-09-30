@@ -203,7 +203,7 @@ ListCorner.Parent = EggList
 
 local ListLayout = Instance.new("UIListLayout")
 ListLayout.Padding = UDim.new(0, 5)
-ListLayout.SortOrder = Enum.SortOrder.Name
+ListLayout.SortOrder = Enum.SortOrder.LayoutOrder
 ListLayout.Parent = EggList
 
 local ListPadding = Instance.new("UIPadding")
@@ -385,6 +385,28 @@ end
 -- GET EGG LIST
 --==================================================
 
+local function getEggLuck(egg)
+	-- WAJIB dari Attribute EggLuck
+	local luck = egg:GetAttribute("EggLuck")
+
+	-- Attribute kadang tersimpan sebagai angka atau string
+	return tonumber(luck) or 0
+end
+
+local function formatLuck(value)
+	value = tonumber(value) or 0
+
+	if value >= 1000000000 then
+		return string.format("%.2fB", value / 1000000000):gsub("%.00B", "B")
+	elseif value >= 1000000 then
+		return string.format("%.2fM", value / 1000000):gsub("%.00M", "M")
+	elseif value >= 1000 then
+		return string.format("%.2fK", value / 1000):gsub("%.00K", "K")
+	else
+		return tostring(math.floor(value))
+	end
+end
+
 local function getEggList()
 
 	local WildEggs = getWildEggs()
@@ -402,7 +424,6 @@ local function getEggList()
 
 		elseif obj:IsA("Folder") then
 
-			-- Kalau Folder langsung berisi egg
 			local hasPart = obj:FindFirstChildWhichIsA("BasePart", true)
 
 			if hasPart then
@@ -411,8 +432,16 @@ local function getEggList()
 		end
 	end
 
+	-- EggLuck TERBESAR selalu di atas
 	table.sort(eggs, function(a, b)
-		return a.Name:lower() < b.Name:lower()
+		local luckA = getEggLuck(a)
+		local luckB = getEggLuck(b)
+
+		if luckA == luckB then
+			return a.Name:lower() < b.Name:lower()
+		end
+
+		return luckA > luckB
 	end)
 
 	return eggs
@@ -582,7 +611,10 @@ end
 
 local function createEggRow(egg)
 
+	local luck = getEggLuck(egg)
+
 	local Row = Instance.new("Frame")
+	Row.LayoutOrder = -luck
 	Row.Name = egg.Name
 	Row.Size = UDim2.new(1, -2, 0, 38)
 
@@ -595,20 +627,35 @@ local function createEggRow(egg)
 	RowCorner.CornerRadius = UDim.new(0, 7)
 	RowCorner.Parent = Row
 
-	-- Egg name
+	-- Nama egg
 	local NameLabel = Instance.new("TextLabel")
-	NameLabel.Size = UDim2.new(1, -75, 1, 0)
+	NameLabel.Size = UDim2.new(1, -145, 1, 0)
 	NameLabel.Position = UDim2.fromOffset(8, 0)
 
 	NameLabel.BackgroundTransparency = 1
 	NameLabel.Text = egg.Name
 	NameLabel.TextColor3 = Color3.fromRGB(235, 235, 235)
-	NameLabel.TextSize = 12
+	NameLabel.TextSize = 11
 	NameLabel.Font = Enum.Font.GothamMedium
 	NameLabel.TextXAlignment = Enum.TextXAlignment.Left
 	NameLabel.TextTruncate = Enum.TextTruncate.AtEnd
 	NameLabel.ZIndex = 13
 	NameLabel.Parent = Row
+
+	-- Luck dari ATTRIBUTE EggLuck
+	local LuckLabel = Instance.new("TextLabel")
+	LuckLabel.Size = UDim2.fromOffset(72, 38)
+	LuckLabel.Position = UDim2.new(1, -137, 0, 0)
+
+	LuckLabel.BackgroundTransparency = 1
+	LuckLabel.Text = "🍀" .. formatLuck(luck)
+	LuckLabel.TextColor3 = Color3.fromRGB(120, 255, 130)
+	LuckLabel.TextSize = 10
+	LuckLabel.Font = Enum.Font.GothamBold
+	LuckLabel.TextXAlignment = Enum.TextXAlignment.Center
+	LuckLabel.TextTruncate = Enum.TextTruncate.AtEnd
+	LuckLabel.ZIndex = 13
+	LuckLabel.Parent = Row
 
 	-- TAKE
 	local TakeButton = Instance.new("TextButton")
